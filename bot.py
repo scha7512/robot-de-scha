@@ -43,13 +43,13 @@ def save_trades(data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CLAVIER PRINCIPAL (boutons permanents en bas)
+# CLAVIER PRINCIPAL
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def main_keyboard():
     keyboard = [
-        [KeyboardButton("🔍 Scanner"), KeyboardButton("💼 Capital")],
-        [KeyboardButton("📊 Récap du jour"), KeyboardButton("📋 Mes trades")],
-        [KeyboardButton("📈 Bilan complet"), KeyboardButton("❓ Aide")],
+        [KeyboardButton("📂 Trade en cours"), KeyboardButton("💼 Capital")],
+        [KeyboardButton("📊 Récap du jour"),  KeyboardButton("📋 Mes trades")],
+        [KeyboardButton("📈 Bilan complet"),  KeyboardButton("❓ Aide")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -119,12 +119,12 @@ def analyser_action(ticker):
         rsi   = round(100 - (100 / (1 + rs.iloc[-1])), 1)
         stop_loss   = round(prix_actuel * 0.935, 2)
         take_profit = round(prix_actuel * 1.11, 2)
-        data         = load_trades()
-        capital      = data["capital"]
-        montant      = round(min(capital * 0.45, PERTE_MAX * 5), 2)
-        perte_max_t  = round(montant * 0.065, 2)
-        gain_pot     = round(montant * 0.11, 2)
-        ratio_rr     = round(gain_pot / perte_max_t, 2) if perte_max_t > 0 else 0
+        data        = load_trades()
+        capital     = data["capital"]
+        montant     = round(min(capital * 0.45, PERTE_MAX * 5), 2)
+        perte_max_t = round(montant * 0.065, 2)
+        gain_pot    = round(montant * 0.11, 2)
+        ratio_rr    = round(gain_pot / perte_max_t, 2) if perte_max_t > 0 else 0
         return {
             "ticker": ticker, "nom": info.get("longName", ticker),
             "secteur": info.get("sector", "N/A"), "prix": prix_actuel,
@@ -264,13 +264,53 @@ def generer_recap():
     return msg
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# TRADE EN COURS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async def trade_ouvert_action(update, context):
+    data  = load_trades()
+    now   = datetime.now().strftime("%A %d %B %Y — %Hh%M")
+    trade = data.get("trade_ouvert")
+    if not trade:
+        await update.message.reply_text(
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n📂 TRADE EN COURS\n━━━━━━━━━━━━━━━━━━━━━━━━\n📅 {now}\n\nAucun trade ouvert pour l'instant.\nLe bot cherche une opportunité. 🔍\n━━━━━━━━━━━━━━━━━━━━━━━━",
+            reply_markup=main_keyboard()
+        )
+        return
+    analyse = analyser_action(trade['ticker'])
+    prix    = analyse['prix'] if analyse else "N/A"
+    if analyse:
+        variation = round(((prix - trade['prix_entree']) / trade['prix_entree']) * 100, 2)
+        var_emoji = "📈" if variation >= 0 else "📉"
+        var_txt   = f"{'+' if variation >= 0 else ''}{variation}%"
+    else:
+        var_emoji = "❓"
+        var_txt   = "N/A"
+    msg = f"""━━━━━━━━━━━━━━━━━━━━━━━━
+📂 TRADE EN COURS
+━━━━━━━━━━━━━━━━━━━━━━━━
+📅 {now}
+
+🏢 Action       : {trade['ticker']}
+📥 Prix entrée  : {trade['prix_entree']}$
+💰 Prix actuel  : {prix}$
+{var_emoji} Variation   : {var_txt}
+🛑 Stop-loss    : {trade['stop_loss']}$
+🎯 Take-profit  : {trade['take_profit']}$
+💶 Montant      : {trade['montant']}€
+🕐 Ouvert le    : {trade['date']}
+
+{'🟢 En profit pour l instant !' if analyse and prix > trade['prix_entree'] else '🔴 En perte pour l instant.'}
+Le bot surveille toutes les 5 min. 👀
+━━━━━━━━━━━━━━━━━━━━━━━━"""
+    await update.message.reply_text(msg, reply_markup=main_keyboard())
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # HANDLERS DES BOUTONS DU MENU
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texte = update.message.text
-
-    if texte == "🔍 Scanner":
-        await scanner_action(update, context)
+    if texte == "📂 Trade en cours":
+        await trade_ouvert_action(update, context)
     elif texte == "💼 Capital":
         await capital_action(update, context)
     elif texte == "📊 Récap du jour":
@@ -281,14 +321,6 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await bilan_action(update, context)
     elif texte == "❓ Aide":
         await aide_action(update, context)
-
-async def scanner_action(update, context):
-    now = datetime.now().strftime("%A %d %B %Y — %Hh%M")
-    await update.message.reply_text(
-        f"━━━━━━━━━━━━━━━━━━━━━━━━\n🔍 SCAN EN COURS...\n━━━━━━━━━━━━━━━━━━━━━━━━\n📅 {now}\n{banniere_mode()}\nAnalyse des news mondiales...\n⏳ 20-30 secondes\n━━━━━━━━━━━━━━━━━━━━━━━━",
-        reply_markup=main_keyboard()
-    )
-    await lancer_scan(context)
 
 async def capital_action(update, context):
     data  = load_trades()
@@ -379,18 +411,18 @@ async def aide_action(update, context):
 ━━━━━━━━━━━━━━━━━━━━━━━━
 📅 {now}
 {banniere_mode()}
-🔍 Scanner      — Lancer un scan maintenant
-💼 Capital      — Voir ton capital actuel
+📂 Trade en cours — Voir le trade ouvert
+💼 Capital       — Voir ton capital
 📊 Récap du jour — Résumé de la journée
-📋 Mes trades   — 10 derniers trades
+📋 Mes trades    — 10 derniers trades
 📈 Bilan complet — Statistiques du mois
-❓ Aide          — Cette page
+❓ Aide           — Cette page
 
 🔄 Scan auto toutes les 30 min
 📊 Récap auto tous les soirs à 20h
 
-🧪 Tu es en MODE SIMULATION
-Aucun vrai argent n'est utilisé.
+🧪 MODE SIMULATION ACTIF
+Aucun vrai argent utilisé.
 Dans 1 mois tu décides si tu passes
 en mode réel. 💪
 ━━━━━━━━━━━━━━━━━━━━━━━━"""
@@ -424,15 +456,9 @@ quand je détecte une opportunité. 🌍
 async def lancer_scan(context: ContextTypes.DEFAULT_TYPE):
     data = load_trades()
     if data.get("trade_ouvert"):
-        await context.bot.send_message(chat_id=CHAT_ID, text="⚠️ Trade déjà ouvert. Je surveille avant d'en proposer un nouveau.")
         return
     signaux = scanner_news()
     if not signaux:
-        now = datetime.now().strftime("%A %d %B %Y — %Hh%M")
-        await context.bot.send_message(
-            chat_id=CHAT_ID,
-            text=f"━━━━━━━━━━━━━━━━━━━━━━━━\n🔍 SCAN TERMINÉ\n━━━━━━━━━━━━━━━━━━━━━━━━\n📅 {now}\n{banniere_mode()}\nAucun signal fort détecté. 😴\nProchain scan dans 30 min. 🔄\n━━━━━━━━━━━━━━━━━━━━━━━━"
-        )
         return
     for item in signaux:
         msg = formater_signal(item["signal"], item["analyse"])
@@ -604,24 +630,16 @@ async def recap_auto(context: ContextTypes.DEFAULT_TYPE):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def main():
     app = Application.builder().token(TOKEN).build()
-
-    # Commande start uniquement pour démarrer
     app.add_handler(CommandHandler("start", start))
-
-    # Tous les boutons du menu principal
     app.add_handler(MessageHandler(
-        filters.TEXT & filters.Regex("^(🔍 Scanner|💼 Capital|📊 Récap du jour|📋 Mes trades|📈 Bilan complet|❓ Aide)$"),
+        filters.TEXT & filters.Regex("^(📂 Trade en cours|💼 Capital|📊 Récap du jour|📋 Mes trades|📈 Bilan complet|❓ Aide)$"),
         handle_menu
     ))
-
-    # Boutons inline OUI/NON/INFO des signaux
     app.add_handler(CallbackQueryHandler(button_handler))
-
     jq = app.job_queue
     jq.run_repeating(lancer_scan,      interval=1800, first=60)
     jq.run_repeating(surveiller_trade, interval=300,  first=30)
     jq.run_daily(recap_auto, time=datetime.strptime("20:00", "%H:%M").time())
-
     mode = "🧪 SIMULATION" if SIMULATION else "💶 RÉEL"
     print(f"🤖 Robot de Scha démarré en mode {mode}")
     print("Envoie /start sur Telegram pour faire apparaître les boutons !")
