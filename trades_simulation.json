@@ -1,17 +1,1 @@
-{
-  "capital": 100.0,
-  "trades": [],
-  "trade_ouvert": {
-    "ticker": "LMT",
-    "prix_entree": 521.0,
-    "stop_loss": 487.14,
-    "take_profit": 578.31,
-    "montant": 45.0,
-    "date": "2026-05-13 13:16",
-    "statut": "ouvert",
-    "resultat": 0,
-    "simulation": true
-  },
-  "mode": "SIMULATION 🧪",
-  "date_debut": "2026-05-13"
-}
+{"capital": 100, "trades": [], "trade_ouvert": null, "mode": "SIMULATION 🧪", "date_debut": "2026-05-14"}
